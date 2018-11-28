@@ -1046,12 +1046,12 @@ function deregister_worker(pg, pid)
     ids = []
     tonotify = []
     lock(client_refs) do
-        for (id,rv) in pg.refs
-            if in(pid,rv.clientset)
+        for (id, rv) in pg.refs
+            if in(pid, rv.clientset)
                 push!(ids, id)
             end
             if rv.waitingfor == pid
-                push!(tonotify, (id,rv))
+                push!(tonotify, (id, rv))
             end
         end
         for id in ids
@@ -1059,11 +1059,12 @@ function deregister_worker(pg, pid)
         end
 
         # throw exception to tasks waiting for this pid
-        for (id,rv) in tonotify
-            notify_error(rv.c, ProcessExitedException())
+        for (id, rv) in tonotify
+            close(rv.c, ProcessExitedException())
             delete!(pg.refs, id)
         end
     end
+    return
 end
 
 
@@ -1073,6 +1074,7 @@ function interrupt(pid::Integer)
     if isa(w, Worker)
         manage(w.manager, w.id, w.config, :interrupt)
     end
+    return
 end
 
 """
