@@ -2151,3 +2151,15 @@ g30098() = (h30098(:f30098); 4)
 h30098(f) = getfield(@__MODULE__, f)()
 @test @inferred(g30098()) == 4 # make sure that this
 @test @inferred(f30098()) == 3 # doesn't pollute the inference cache of this
+
+# PR #30385
+
+g30385(args...) = h30385(args...)
+h30385(f, args...) = f(args...)
+f30385(T, y) = g30385(getfield, g30385(tuple, T, y), 1)
+k30385(::Type{AbstractFloat}) = 1
+k30385(x) = "dummy"
+j30385(T, y) = k30385(f30385(T, y))
+
+@test @inferred(j30385(AbstractFloat, 1)) == 1
+@test @inferred(j30385(:dummy, 1)) == "dummy"
