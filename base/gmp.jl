@@ -282,7 +282,7 @@ end
 BigInt(x::Float16) = BigInt(Float64(x))
 BigInt(x::Float32) = BigInt(Float64(x))
 
-function BigInt(x::Integer)
+function BigInt(x::Union{Signed,Unsigned})
     x == 0 && return BigInt(Culong(0))
     nd = ndigits(x, base=2)
     z = MPZ.realloc2(nd)
@@ -301,6 +301,33 @@ function BigInt(x::Integer)
     z
 end
 
+function BigInt(x::Integer)
+    if x < 0
+        if typemin(Clong) <= x
+            return BigInt(convert(Clong,x))
+        end
+        b = BigInt(0)
+        shift = 0
+        while x < -1
+            b += BigInt(~UInt32(x&0xffffffff))<<shift
+            x >>= 32
+            shift += 32
+        end
+        return -b-1
+    else
+        if x <= typemax(Culong)
+            return BigInt(convert(Culong,x))
+        end
+        b = BigInt(0)
+        shift = 0
+        while x > 0
+            b += BigInt(UInt32(x&0xffffffff))<<shift
+            x >>>= 32
+            shift += 32
+        end
+        return b
+    end
+end
 
 rem(x::BigInt, ::Type{Bool}) = !iszero(x) & unsafe_load(x.d) % Bool # never unsafe here
 
