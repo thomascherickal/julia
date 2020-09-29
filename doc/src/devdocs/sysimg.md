@@ -60,12 +60,12 @@ Additionally, a few special features are supported to control the function cloni
 
 3. `opt_size`
 
-    This cause the function for the targe to be optimize for size when there isn't a significant
+    This causes the function for the target to be optimized for size when there isn't a significant
     runtime performance impact. This corresponds to `-Os` GCC and Clang option.
 
 4. `min_size`
 
-    This cause the function for the targe to be optimize for size that might have
+    This causes the function for the target to be optimized for size that might have
     a significant runtime performance impact. This corresponds to `-Oz` Clang option.
 
 As an example, at the time of this writing, the following string is used in the creation of
@@ -109,5 +109,5 @@ See code comments for each components for more implementation details.
     parsing the metadata saved during system image generation.
     Host feature detection and selection decision are done in `src/processor_*.cpp`
     depending on the ISA. The target selection will prefer exact CPU name match,
-    larger vector register size, and larget number of features.
+    larger vector register size, and larger number of features.
     An overview of this process is in `src/processor.cpp`.

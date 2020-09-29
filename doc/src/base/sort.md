@@ -5,7 +5,7 @@ values. By default, Julia picks reasonable algorithms and sorts in standard asce
 
 ```jldoctest
 julia> sort([2,3,1])
-3-element Array{Int64,1}:
+3-element Vector{Int64}:
  1
  2
  3
@@ -15,7 +15,7 @@ You can easily sort in reverse order as well:
 
 ```jldoctest
 julia> sort([2,3,1], rev=true)
-3-element Array{Int64,1}:
+3-element Vector{Int64}:
  3
  2
  1
@@ -29,7 +29,7 @@ julia> a = [2,3,1];
 julia> sort!(a);
 
 julia> a
-3-element Array{Int64,1}:
+3-element Vector{Int64}:
  1
  2
  3
@@ -125,6 +125,7 @@ Base.issorted
 Base.Sort.searchsorted
 Base.Sort.searchsortedfirst
 Base.Sort.searchsortedlast
+Base.Sort.insorted
 Base.Sort.partialsort!
 Base.Sort.partialsort
 Base.Sort.partialsortperm

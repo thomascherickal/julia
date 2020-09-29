@@ -1,28 +1,9 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
-const EMPTY_VECTOR = Vector{Any}()
-
-mutable struct InferenceResult
-    linfo::MethodInstance
-    argtypes::Vector{Any}
-    overridden_by_const::BitVector
-    result # ::Type, or InferenceState if WIP
-    src #::Union{CodeInfo, OptimizationState, Nothing} # if inferred copy is available
-    function InferenceResult(linfo::MethodInstance, given_argtypes = nothing)
-        if isdefined(linfo, :inferred_const)
-            result = Const(linfo.inferred_const)
-        else
-            result = linfo.rettype
-        end
-        argtypes, overridden_by_const = matching_cache_argtypes(linfo, given_argtypes)
-        return new(linfo, argtypes, overridden_by_const, result, nothing)
-    end
-end
-
 function is_argtype_match(@nospecialize(given_argtype),
                           @nospecialize(cache_argtype),
                           overridden_by_const::Bool)
-    if isa(given_argtype, Const) || isa(given_argtype, PartialTuple)
+    if isa(given_argtype, Const) || isa(given_argtype, PartialStruct)
         return is_lattice_equal(given_argtype, cache_argtype)
     end
     return !overridden_by_const
@@ -40,9 +21,13 @@ function matching_cache_argtypes(linfo::MethodInstance, given_argtypes::Vector)
     if linfo.def.isva
         isva_given_argtypes = Vector{Any}(undef, nargs)
         for i = 1:(nargs - 1)
-            isva_given_argtypes[i] = given_argtypes[i]
+            isva_given_argtypes[i] = argtype_by_index(given_argtypes, i)
         end
-        isva_given_argtypes[nargs] = tuple_tfunc(given_argtypes[nargs:end])
+        if length(given_argtypes) >= nargs || !isvarargtype(given_argtypes[end])
+            isva_given_argtypes[nargs] = tuple_tfunc(given_argtypes[nargs:end])
+        else
+            isva_given_argtypes[nargs] = tuple_tfunc(given_argtypes[end:end])
+        end
         given_argtypes = isva_given_argtypes
     end
     cache_argtypes, overridden_by_const = matching_cache_argtypes(linfo, nothing)
@@ -66,7 +51,7 @@ function matching_cache_argtypes(linfo::MethodInstance, ::Nothing)
     nargs::Int = toplevel ? 0 : linfo.def.nargs
     cache_argtypes = Vector{Any}(undef, nargs)
     # First, if we're dealing with a varargs method, then we set the last element of `args`
-    # to the appropriate `Tuple` type or `PartialTuple` instance.
+    # to the appropriate `Tuple` type or `PartialStruct` instance.
     if !toplevel && linfo.def.isva
         if linfo.specTypes == Tuple
             if nargs > 1

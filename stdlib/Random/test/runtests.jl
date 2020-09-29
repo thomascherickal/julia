@@ -10,7 +10,7 @@ using .Main.OffsetArrays
 using Random
 using Random.DSFMT
 
-using Random: Sampler, SamplerRangeFast, SamplerRangeInt, MT_CACHE_F, MT_CACHE_I
+using Random: Sampler, SamplerRangeFast, SamplerRangeInt, SamplerRangeNDL, MT_CACHE_F, MT_CACHE_I
 
 import Future # randjump
 
@@ -222,24 +222,10 @@ randmtzig_fill_ziggurat_tables()
 @test all(we == Random.we)
 @test all(fe == Random.fe)
 
-#same random numbers on for small ranges on all systems
-guardseed() do
-    seed = rand(UInt)
-    Random.seed!(seed)
-    r = map(Int64, rand(map(Int32, 97:122)))
-    Random.seed!(seed)
-    @test r == rand(map(Int64, 97:122))
-    Random.seed!(seed)
-    r = map(UInt64, rand(map(UInt32, 97:122)))
-    Random.seed!(seed)
-    @test r == rand(map(UInt64, 97:122))
-end
-
 for U in (Int64, UInt64)
     @test all(div(one(UInt64) << 52, k)*k - 1 == SamplerRangeInt(map(U, 1:k)).u
               for k in 13 .+ Int64(2).^(1:30))
 end
-
 
 #issue 8257
 let i8257 = 1:1/3:100
@@ -455,6 +441,38 @@ for rng in [MersenneTwister(), RandomDevice()],
     end
 end
 
+@testset "rand(Bool) uniform distribution" begin
+    for n in [rand(1:8), rand(9:16), rand(17:64)]
+        a = zeros(Bool, n)
+        as = zeros(Int, n)
+        # we will test statistical properties for each position of a,
+        # but also for 3 linear combinations of positions (for the array version)
+        lcs = unique!.([rand(1:n, 2), rand(1:n, 3), rand(1:n, 5)])
+        aslcs = zeros(Int, 3)
+        for rng = (MersenneTwister(), RandomDevice())
+            for scalar = [false, true]
+                fill!(a, 0)
+                fill!(as, 0)
+                fill!(aslcs, 0)
+                for _ = 1:49
+                    if scalar
+                        for i in eachindex(as)
+                            as[i] += rand(rng, Bool)
+                        end
+                    else
+                        as .+= rand!(rng, a)
+                        aslcs .+= [xor(getindex.(Ref(a), lcs[i])...) for i in 1:3]
+                    end
+                end
+                @test all(x -> 7 <= x <= 42, as) # for each x, fails with proba ≈ 2/35_000_000
+                if !scalar
+                    @test all(x -> 7 <= x <= 42, aslcs)
+                end
+            end
+        end
+    end
+end
+
 # test reproducility of methods
 let mta = MersenneTwister(42), mtb = MersenneTwister(42)
 
@@ -485,7 +503,7 @@ let mta = MersenneTwister(42), mtb = MersenneTwister(42)
     @test sort!(randperm(10)) == sort!(shuffle(1:10)) == 1:10
     @test randperm(mta,big(10)) == randperm(mtb,big(10)) # cf. #16376
     @test randperm(0) == []
-    @test_throws ErrorException randperm(-1)
+    @test_throws ArgumentError randperm(-1)
 
     let p = randperm(UInt16(12))
         @test typeof(p) ≡ Vector{UInt16}
@@ -601,7 +619,7 @@ end
 
 # Random.seed!(rng, ...) returns rng (#21248)
 guardseed() do
-    g = Random.GLOBAL_RNG
+    g = Random.default_rng()
     m = MersenneTwister(0)
     @test Random.seed!() === g
     @test Random.seed!(rand(UInt)) === g
@@ -675,11 +693,16 @@ struct RandomStruct23964 end
     @test_throws ArgumentError rand(RandomStruct23964())
 end
 
-@testset "rand(::$(typeof(RNG)), ::UnitRange{$T}" for RNG ∈ (MersenneTwister(), RandomDevice()),
-                                                 T ∈ (Int32, UInt32, Int64, Int128, UInt128)
-    RNG isa MersenneTwister && Random.seed!(RNG, rand(UInt128)) # for reproducibility
-    r = T(1):T(108)
-    @test rand(RNG, SamplerRangeFast(r)) ∈ r
+@testset "rand(::$(typeof(RNG)), ::UnitRange{$T}" for RNG ∈ (MersenneTwister(rand(UInt128)), RandomDevice()),
+                                                        T ∈ (Int8, Int16, Int32, UInt32, Int64, Int128, UInt128)
+    for S in (SamplerRangeInt, SamplerRangeFast, SamplerRangeNDL)
+        S == SamplerRangeNDL && sizeof(T) > 8 && continue
+        r = T(1):T(108)
+        @test rand(RNG, S(r)) ∈ r
+        @test rand(RNG, S(typemin(T):typemax(T))) isa T
+        a, b = sort!(rand(-1000:1000, 2) .% T)
+        @test rand(RNG, S(a:b)) ∈ a:b
+    end
 end
 
 @testset "rand! is allocation-free" begin
@@ -712,4 +735,69 @@ end
         @test rand((x, 2, 3, 4, 5)) ∈ 1:5
         @test rand((x, 2, 3, 4, 6)) ∈ 1:6
     end
+end
+
+@testset "GLOBAL_RNG" begin
+    local GLOBAL_RNG = Random.GLOBAL_RNG
+    local LOCAL_RNG = Random.default_rng()
+    @test VERSION < v"2" # deprecate this in v2
+
+    @test Random.seed!(GLOBAL_RNG, nothing) === LOCAL_RNG
+    @test Random.seed!(GLOBAL_RNG, UInt32[0]) === LOCAL_RNG
+    @test Random.seed!(GLOBAL_RNG, 0) === LOCAL_RNG
+    @test Random.seed!(GLOBAL_RNG) === LOCAL_RNG
+
+    mt = MersenneTwister(1)
+    @test copy!(mt, GLOBAL_RNG) === mt
+    @test mt == LOCAL_RNG
+    Random.seed!(mt, 2)
+    @test mt != LOCAL_RNG
+    @test copy!(GLOBAL_RNG, mt) === LOCAL_RNG
+    @test mt == LOCAL_RNG
+    mt2 = copy(GLOBAL_RNG)
+    @test mt2 isa typeof(LOCAL_RNG)
+    @test mt2 !== LOCAL_RNG
+    @test mt2 == LOCAL_RNG
+
+    for T in (Random.UInt52Raw{UInt64},
+              Random.UInt2x52Raw{UInt128},
+              Random.UInt104Raw{UInt128},
+              Random.CloseOpen12_64)
+        x = Random.SamplerTrivial(T())
+        @test rand(GLOBAL_RNG, x) === rand(mt, x)
+    end
+    for T in (Int64, UInt64, Int128, UInt128, Bool, Int8, UInt8, Int16, UInt16, Int32, UInt32)
+        x = Random.SamplerType{T}()
+        @test rand(GLOBAL_RNG, x) === rand(mt, x)
+    end
+
+    A = fill(0.0, 100, 100)
+    B = fill(1.0, 100, 100)
+    vA = view(A, :, :)
+    vB = view(B, :, :)
+    I1 = Random.SamplerTrivial(Random.CloseOpen01{Float64}())
+    I2 = Random.SamplerTrivial(Random.CloseOpen12{Float64}())
+    @test rand!(GLOBAL_RNG, A, I1) === A == rand!(mt, B, I1) === B
+    B = fill!(B, 1.0)
+    @test rand!(GLOBAL_RNG, vA, I1) === vA
+    rand!(mt, vB, I1)
+    @test A == B
+    for T in (Float16, Float32)
+        B = fill!(B, 1.0)
+        @test rand!(GLOBAL_RNG, A, I2) === A == rand!(mt, B, I2) === B
+        B = fill!(B, 1.0)
+        @test rand!(GLOBAL_RNG, A, I1) === A == rand!(mt, B, I1) === B
+    end
+    for T in Base.BitInteger_types
+        x = Random.SamplerType{T}()
+        B = fill!(B, 1.0)
+        @test rand!(GLOBAL_RNG, A, x) === A == rand!(mt, B, x) === B
+    end
+    # issue #33170
+    @test Sampler(GLOBAL_RNG, 2:4, Val(1)) isa SamplerRangeNDL
+    @test Sampler(GLOBAL_RNG, 2:4, Val(Inf)) isa SamplerRangeNDL
+end
+
+@testset "RNGs broadcast as scalars: T" for T in (MersenneTwister, RandomDevice)
+    @test length.(rand.(T(), 1:3)) == 1:3
 end

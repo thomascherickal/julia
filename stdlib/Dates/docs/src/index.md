@@ -244,7 +244,7 @@ Date
       value: Int64 735264
 
 julia> t.instant
-Dates.UTInstant{Day}(735264 days)
+Dates.UTInstant{Day}(Day(735264))
 
 julia> Dates.value(t)
 735264
@@ -331,7 +331,7 @@ function `dayabbr` will error.
 
 ```jldoctest tdate2
 julia> Dates.dayabbr(t;locale="french")
-ERROR: BoundsError: attempt to access 1-element Array{String,1} at index [5]
+ERROR: BoundsError: attempt to access 1-element Vector{String} at index [5]
 Stacktrace:
 [...]
 ```
@@ -347,7 +347,7 @@ The `Dates` module approach tries to follow the simple principle of trying to ch
 little as possible when doing [`Period`](@ref) arithmetic. This approach is also often known as
 *calendrical* arithmetic or what you would probably guess if someone were to ask you the same
 calculation in a conversation. Why all the fuss about this? Let's take a classic example: add
-1 month to January 31st, 2014. What's the answer? Javascript will say [March 3](http://www.markhneedham.com/blog/2009/01/07/javascript-add-a-month-to-a-date/)
+1 month to January 31st, 2014. What's the answer? Javascript will say [March 3](https://markhneedham.com/blog/2009/01/07/javascript-add-a-month-to-a-date/)
 (assumes 31 days). PHP says [March 2](https://stackoverflow.com/questions/5760262/php-adding-months-to-a-date-while-not-exceeding-the-last-day-of-the-month)
 (assumes 30 days). The fact is, there is no right answer. In the `Dates` module, it gives
 the result of February 28th. How does it figure that out? I like to think of the classic 7-7-7
@@ -400,10 +400,10 @@ As a bonus, all period arithmetic objects work directly with ranges:
 
 ```jldoctest
 julia> dr = Date(2014,1,29):Day(1):Date(2014,2,3)
-2014-01-29:1 day:2014-02-03
+Date("2014-01-29"):Day(1):Date("2014-02-03")
 
 julia> collect(dr)
-6-element Array{Date,1}:
+6-element Vector{Date}:
  2014-01-29
  2014-01-30
  2014-01-31
@@ -412,10 +412,10 @@ julia> collect(dr)
  2014-02-03
 
 julia> dr = Date(2014,1,29):Dates.Month(1):Date(2014,07,29)
-2014-01-29:1 month:2014-07-29
+Date("2014-01-29"):Month(1):Date("2014-07-29")
 
 julia> collect(dr)
-7-element Array{Date,1}:
+7-element Vector{Date}:
  2014-01-29
  2014-02-28
  2014-03-29
@@ -491,7 +491,7 @@ julia> filter(dr) do x
            Dates.April <= Dates.month(x) <= Dates.Nov &&
            Dates.dayofweekofmonth(x) == 2
        end
-8-element Array{Date,1}:
+8-element Vector{Date}:
  2014-04-08
  2014-05-13
  2014-06-10
@@ -643,6 +643,8 @@ Dates.TimeType
 Dates.DateTime
 Dates.Date
 Dates.Time
+Dates.TimeZone
+Dates.UTC
 ```
 
 ## Dates Functions
@@ -653,7 +655,7 @@ Dates.DateTime(::Dates.Period)
 Dates.DateTime(::Function, ::Any...)
 Dates.DateTime(::Dates.TimeType)
 Dates.DateTime(::AbstractString, ::AbstractString)
-Dates.format
+Dates.format(::Dates.TimeType, ::AbstractString)
 Dates.DateFormat
 Dates.@dateformat_str
 Dates.DateTime(::AbstractString, ::Dates.DateFormat)
@@ -669,7 +671,7 @@ Dates.Time(::Function, ::Any...)
 Dates.Time(::Dates.DateTime)
 Dates.now()
 Dates.now(::Type{Dates.UTC})
-Base.eps
+Base.eps(::Union{Type{DateTime}, Type{Date}, Type{Time}, TimeType})
 ```
 
 ### Accessor Functions

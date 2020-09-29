@@ -77,6 +77,33 @@ Random.seed!(1)
     for newtype in [Diagonal, Bidiagonal, Tridiagonal, SymTridiagonal]
         @test_throws ArgumentError convert(newtype,A)
     end
+
+
+    # test operations/constructors (not conversions) permitted in the docs
+    dl = [1., 1.]
+    d = [-2., -2., -2.]
+    T = Tridiagonal(dl, d, -dl)
+    S = SymTridiagonal(d, dl)
+    Bu = Bidiagonal(d, dl, :U)
+    Bl = Bidiagonal(d, dl, :L)
+    D = Diagonal(d)
+    M = [-2. 0. 0.; 1. -2. 0.; -1. 1. -2.]
+    U = UpperTriangular(M)
+    L = LowerTriangular(Matrix(M'))
+
+    for A in (T, S, Bu, Bl, D, U, L, M)
+        Adense = Matrix(A)
+        B = Symmetric(A)
+        Bdense = Matrix(B)
+        for (C,Cdense) in ((A,Adense), (B,Bdense))
+            @test Diagonal(C) == Diagonal(Cdense)
+            @test Bidiagonal(C, :U) == Bidiagonal(Cdense, :U)
+            @test Bidiagonal(C, :L) == Bidiagonal(Cdense, :L)
+            @test Tridiagonal(C) == Tridiagonal(Cdense)
+            @test UpperTriangular(C) == UpperTriangular(Cdense)
+            @test LowerTriangular(C) == LowerTriangular(Cdense)
+        end
+    end
 end
 
 @testset "Binary ops among special types" begin
@@ -132,7 +159,7 @@ end
 @testset "+ and - among structured matrices with different container types" begin
     diag = 1:5
     offdiag = 1:4
-    uniformscalingmats = [UniformScaling(3), UniformScaling(1.0), UniformScaling(3//5), UniformScaling(Complex{Float64}(1.3, 3.5))]
+    uniformscalingmats = [UniformScaling(3), UniformScaling(1.0), UniformScaling(3//5), UniformScaling(ComplexF64(1.3, 3.5))]
     mats = [Diagonal(diag), Bidiagonal(diag, offdiag, 'U'), Bidiagonal(diag, offdiag, 'L'), Tridiagonal(offdiag, diag, offdiag), SymTridiagonal(diag, offdiag)]
     for T in [ComplexF64, Int64, Rational{Int64}, Float64]
         push!(mats, Diagonal(Vector{T}(diag)))
@@ -148,14 +175,17 @@ end
                 @test (op)(A, B) ≈ (op)(Matrix(A), Matrix(B)) ≈ Matrix((op)(A, B))
             end
         end
-
+    end
+    for op in (+,-)
         for A in mats
             for B in uniformscalingmats
                 @test (op)(A, B) ≈ (op)(Matrix(A), B) ≈ Matrix((op)(A, B))
+                @test (op)(B, A) ≈ (op)(B, Matrix(A)) ≈ Matrix((op)(B, A))
             end
         end
     end
 end
+
 
 @testset "Triangular Types and QR" begin
     for typ in [UpperTriangular,LowerTriangular,LinearAlgebra.UnitUpperTriangular,LinearAlgebra.UnitLowerTriangular]
@@ -296,6 +326,88 @@ end
 end
 @testset "vcat of Vectors with SparseVectors should yield SparseVector (#22225)" begin
     @test isa((@inferred vcat(Float64[], spzeros(1))), SparseVector)
+end
+
+
+# for testing types with a dimension
+const BASE_TEST_PATH = joinpath(Sys.BINDIR, "..", "share", "julia", "test")
+isdefined(Main, :Furlongs) || @eval Main include(joinpath($(BASE_TEST_PATH), "testhelpers", "Furlongs.jl"))
+using .Main.Furlongs
+
+@testset "zero and one for structured matrices" begin
+    for elty in (Int64, Float64, ComplexF64)
+        D = Diagonal(rand(elty, 10))
+        Bu = Bidiagonal(rand(elty, 10), rand(elty, 9), 'U')
+        Bl = Bidiagonal(rand(elty, 10), rand(elty, 9), 'L')
+        T = Tridiagonal(rand(elty, 9),rand(elty, 10), rand(elty, 9))
+        S = SymTridiagonal(rand(elty, 10), rand(elty, 9))
+        mats = [D, Bu, Bl, T, S]
+        for A in mats
+            @test iszero(zero(A))
+            @test isone(one(A))
+            @test zero(A) == zero(Matrix(A))
+            @test one(A) == one(Matrix(A))
+        end
+
+        @test zero(D) isa Diagonal
+        @test one(D) isa Diagonal
+
+        @test zero(Bu) isa Bidiagonal
+        @test one(Bu) isa Bidiagonal
+        @test zero(Bl) isa Bidiagonal
+        @test one(Bl) isa Bidiagonal
+        @test zero(Bu).uplo == one(Bu).uplo == Bu.uplo
+        @test zero(Bl).uplo == one(Bl).uplo == Bl.uplo
+
+        @test zero(T) isa Tridiagonal
+        @test one(T) isa Tridiagonal
+        @test zero(S) isa SymTridiagonal
+        @test one(S) isa SymTridiagonal
+    end
+
+    # ranges
+    D = Diagonal(1:10)
+    Bu = Bidiagonal(1:10, 1:9, 'U')
+    Bl = Bidiagonal(1:10, 1:9, 'L')
+    T = Tridiagonal(1:9, 1:10, 1:9)
+    S = SymTridiagonal(1:10, 1:9)
+    mats = [D, Bu, Bl, T, S]
+    for A in mats
+        @test iszero(zero(A))
+        @test isone(one(A))
+        @test zero(A) == zero(Matrix(A))
+        @test one(A) == one(Matrix(A))
+    end
+
+    @test zero(D) isa Diagonal
+    @test one(D) isa Diagonal
+
+    @test zero(Bu) isa Bidiagonal
+    @test one(Bu) isa Bidiagonal
+    @test zero(Bl) isa Bidiagonal
+    @test one(Bl) isa Bidiagonal
+    @test zero(Bu).uplo == one(Bu).uplo == Bu.uplo
+    @test zero(Bl).uplo == one(Bl).uplo == Bl.uplo
+
+    @test zero(T) isa Tridiagonal
+    @test one(T) isa Tridiagonal
+    @test zero(S) isa SymTridiagonal
+    @test one(S) isa SymTridiagonal
+
+    # eltype with dimensions
+    D = Diagonal{Furlong{2, Int64}}([1, 2, 3, 4])
+    Bu = Bidiagonal{Furlong{2, Int64}}([1, 2, 3, 4], [1, 2, 3], 'U')
+    Bl =  Bidiagonal{Furlong{2, Int64}}([1, 2, 3, 4], [1, 2, 3], 'L')
+    T = Tridiagonal{Furlong{2, Int64}}([1, 2, 3], [1, 2, 3, 4], [1, 2, 3])
+    S = SymTridiagonal{Furlong{2, Int64}}([1, 2, 3, 4], [1, 2, 3])
+    mats = [D, Bu, Bl, T, S]
+    for A in mats
+        @test iszero(zero(A))
+        @test isone(one(A))
+        @test zero(A) == zero(Matrix(A))
+        @test one(A) == one(Matrix(A))
+        @test eltype(one(A)) == typeof(one(eltype(A)))
+    end
 end
 
 @testset "== for structured matrices" begin

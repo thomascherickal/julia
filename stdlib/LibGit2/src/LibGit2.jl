@@ -1,27 +1,27 @@
 # This file is a part of Julia. License is MIT: https://julialang.org/license
 
 """
-Interface to [libgit2](https://libgit2.github.com/).
+Interface to [libgit2](https://libgit2.org/).
 """
 module LibGit2
 
 import Base: ==
 using Base: something, notnothing
-using Base.Printf: @printf
+using Printf: @printf
 
 export with, GitRepo, GitConfig
 
 const GITHUB_REGEX =
-    r"^(?:git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
+    r"^(?:(?:ssh://)?git@|git://|https://(?:[\w\.\+\-]+@)?)github.com[:/](([^/].+)/(.+?))(?:\.git)?$"i
 
 const REFCOUNT = Threads.Atomic{Int}(0)
 
 function ensure_initialized end
 
+include("error.jl")
 include("utils.jl")
 include("consts.jl")
 include("types.jl")
-include("error.jl")
 include("signature.jl")
 include("oid.jl")
 include("reference.jl")
@@ -289,7 +289,7 @@ function fetch(repo::GitRepo; remote::AbstractString="origin",
         fo = FetchOptions(callbacks=remote_callbacks)
         fetch(rmt, refspecs, msg="from $(url(rmt))", options=fo)
     catch err
-        if isa(err, GitError) && err.code == Error.EAUTH
+        if isa(err, GitError) && err.code === Error.EAUTH
             reject(cred_payload)
         else
             Base.shred!(cred_payload)
@@ -345,7 +345,7 @@ function push(repo::GitRepo; remote::AbstractString="origin",
         push_opts = PushOptions(callbacks=remote_callbacks)
         push(rmt, refspecs, force=force, options=push_opts)
     catch err
-        if isa(err, GitError) && err.code == Error.EAUTH
+        if isa(err, GitError) && err.code === Error.EAUTH
             reject(cred_payload)
         else
             Base.shred!(cred_payload)
@@ -579,7 +579,7 @@ function clone(repo_url::AbstractString, repo_path::AbstractString;
         repo = try
             clone(repo_url, repo_path, clone_opts)
         catch err
-            if isa(err, GitError) && err.code == Error.EAUTH
+            if isa(err, GitError) && err.code === Error.EAUTH
                 reject(cred_payload)
             else
                 Base.shred!(cred_payload)
@@ -728,7 +728,7 @@ function merge!(repo::GitRepo;
                                "There is no fetch reference for this branch."))
             end
             Base.map(fh->GitAnnotated(repo,fh), fheads)
-        else # merge commitish
+        else # merge committish
             [GitAnnotated(repo, committish)]
         end
     else
@@ -785,7 +785,7 @@ function merge!(repo::GitRepo;
                merge_opts=merge_opts,
                checkout_opts=checkout_opts)
     finally
-        Base.map(close, upst_anns)
+        Base.foreach(close, upst_anns)
     end
 end
 
@@ -1003,7 +1003,7 @@ function set_ssl_cert_locations(cert_loc)
     cert_dir  = isdir(cert_loc) ? cert_loc : Cstring(C_NULL)
     cert_file == C_NULL && cert_dir == C_NULL && return
     @check ccall((:git_libgit2_opts, :libgit2), Cint,
-          (Cint, Cstring, Cstring),
+          (Cint, Cstring...),
           Cint(Consts.SET_SSL_CERT_LOCATIONS), cert_file, cert_dir)
 end
 

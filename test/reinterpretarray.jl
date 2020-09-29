@@ -22,7 +22,7 @@ let Ac = copy(A), Bc = copy(B)
     @test Bc == Complex{Int64}[1+2im, 3+4im, 5+6im]
 
     A1 = reinterpret(Float64, A)
-    A2 = reinterpret(Complex{Float64}, A)
+    A2 = reinterpret(ComplexF64, A)
     A1[1] = 1.0
     @test real(A2[1]) == 1.0
 end
@@ -50,6 +50,35 @@ let A = collect(reshape(1:20, 5, 4))
     @test R isa StridedArray
     @test view(R, :, :) isa StridedArray
     @test reshape(R, :) isa StridedArray
+end
+
+# and ensure a reinterpret array containing a strided array can have strides computed
+let A = view(reinterpret(Int16, collect(reshape(UnitRange{Int64}(1, 20), 5, 4))), :, 1:2)
+    R = reinterpret(Int32, A)
+    @test strides(R) == (1, 10)
+    @test stride(R, 1) == 1
+    @test stride(R, 2) == 10
+end
+
+@testset "strides" begin
+    a = rand(10)
+    b = view(a,2:2:10)
+    A = rand(10,10)
+    B = view(A, 2:2:10, 2:2:10)
+
+    @test strides(a) == (1,)
+    @test strides(b) == (2,)
+    @test strides(A) == (1,10)
+    @test strides(B) == (2,20)
+
+    for M in (a, b, A, B)
+        @inferred strides(M)
+        strides_M = strides(M)
+
+        for (i, _stride) in enumerate(collect(strides_M))
+            @test _stride == stride(M, i)
+        end
+    end
 end
 
 # IndexStyle
@@ -155,11 +184,24 @@ let a = [0.1 0.2; 0.3 0.4], at = reshape([(i,i+1) for i = 1:2:8], 2, 2)
     offsetvt = (-2, 4)
     vt = OffsetArray(at, offsetvt)
     istr = string(Int)
-    @test_throws ArgumentError("cannot reinterpret a `Tuple{$istr,$istr}` array to `$istr` when the first axis is Base.IdentityUnitRange(-1:0). Try reshaping first.") reinterpret(Int, vt)
+    @test_throws ArgumentError("cannot reinterpret a `Tuple{$istr, $istr}` array to `$istr` when the first axis is Base.IdentityUnitRange(-1:0). Try reshaping first.") reinterpret(Int, vt)
     vt = reshape(vt, 1:1, axes(vt)...)
     r = reinterpret(Int, vt)
     @test r == OffsetArray(reshape(1:8, 2, 2, 2), (0, offsetvt...))
 end
+
+@testset "potentially aliased copies" begin
+    buffer = UInt8[1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0]
+    mid = length(buffer) ÷ 2
+    x1 = reinterpret(Int64, @view buffer[1:mid])
+    x2 = reinterpret(Int64, @view buffer[mid+1:end])
+    x1 .= x2
+    @test x1 == x2 == [2]
+    @test x1[] === x2[] === Int64(2)
+end
+
+# avoid nesting
+@test parent(reinterpret(eltype(A), reinterpret(eltype(B), A))) === A
 
 # Test 0-dimensional Arrays
 A = zeros(UInt32)
